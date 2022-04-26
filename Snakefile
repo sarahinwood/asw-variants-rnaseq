@@ -30,7 +30,7 @@ all_samples = pep.sample_table['sample_name']
 trinity_container = 'docker://trinityrnaseq/trinityrnaseq:2.11.0'
 gatk_container = 'docker://broadinstitute/gatk:4.1.4.0' # same gatk version as in trinity container
 bcftools_container = 'docker://biocontainers/bcftools:v1.9-1-deb_cv1'
-plink_container = 'docker://biocontainers/plink1.9:v1.90b6.6-181012-1-deb_cv1'
+plink_container = 'library://sinwood/plink/plink_2.0:0.0.1'
 vcftools_container = 'docker://biocontainers/vcftools:v0.1.16-1-deb_cv1'
 
 #########
@@ -46,8 +46,8 @@ rule target:
         ##missing stats on filtered variants
         "output/02_filtering/missing_filtered_snps.out",
         ##Plink --> PCA
-        expand('output/04_plink/{vcf_group}/no_ldpruning/filtered_snps_plink_pca.eigenvec', vcf_group=["all_samples", "ruakura", "dunedin"]),
-        expand('output/04_plink/{vcf_group}/ld_pruned/filtered_snps_plink_pca.eigenvec', vcf_group=["all_samples", "ruakura", "dunedin"]),
+        #expand('output/04_plink/{vcf_group}/no_ldpruning/filtered_snps_plink_pca.eigenvec', vcf_group=["all_samples", "ruakura", "dunedin"]),
+        #expand('output/04_plink/{vcf_group}/ld_pruned/filtered_snps_plink_pca.eigenvec', vcf_group=["all_samples", "ruakura", "dunedin"]),
         'output/03_final_vcfs/all_samples_pruned.vcf.gz',
         #stats
         #'output/05_stats/nucl_diversity_1kb.windowed.pi',
@@ -133,7 +133,7 @@ rule nucl_div:
 rule prune_vcf:
     input:
         vcf = 'output/03_final_vcfs/renamed/all_samples.vcf',
-        prune = 'output/04_plink/all_samples/ld_pruned/filtered_snps_plink.prune.in'
+        prune = 'output/04_plink_pruning/all_samples_pruned.prune.in'
     output:
         vcf = 'output/03_final_vcfs/all_samples_pruned.vcf.gz'
     log:
@@ -163,46 +163,21 @@ rule bcftools_setID:
         '-O v -o {output} '
         '&> {log}'
 
-# pca on pruned
-rule plink_pca_LD:
-    input:
-        vcf = 'output/03_final_vcfs/{vcf_group}.vcf.gz',
-        pruned = 'output/04_plink/{vcf_group}/ld_pruned/filtered_snps_plink.prune.in'
-    output:
-        'output/04_plink/{vcf_group}/ld_pruned/filtered_snps_plink_pca.eigenvec'
-    params:
-        'output/04_plink/{vcf_group}/ld_pruned/filtered_snps_plink_pca'
-    log:
-        'output/logs/plink_pca_LD_{vcf_group}.log'
-    singularity:
-        plink_container
-    shell:
-        '/usr/bin/plink1.9 '
-        '--vcf {input.vcf} '
-        '--double-id '
-        '--allow-extra-chr '
-        '--set-missing-var-ids @:# '
-        '--extract {input.pruned} '
-        '--make-bed '
-        '--pca '
-        '--out {params} '
-        '&> {log}'
-
-# prune dataset of variants in linkage - PCA relies on independent variables
+# prune dataset of variants in linkage - PCA relies on independent variables # https://www.cog-genomics.org/plink/2.0/ld#indep
 rule plink_prune_linkage:
     input:
-        'output/03_final_vcfs/{vcf_group}.vcf.gz'
+        'output/03_final_vcfs/all_samples.vcf.gz'
     output:
-        'output/04_plink/{vcf_group}/ld_pruned/filtered_snps_plink.prune.in'
+        'output/04_plink_pruning/all_samples_pruned.prune.in'
     params:
         indep = '50 10 0.1',     # 50 kb window, 10 SNPs, r2 < 0.1,
-        out = 'output/04_plink/{vcf_group}/ld_pruned/filtered_snps_plink'
+        out = 'output/04_plink_pruning/all_samples_pruned'
     log:
-        'output/logs/plink_prune_linkage_{vcf_group}.log'
+        'output/logs/plink_prune_linkage.log'
     singularity:
         plink_container
     shell:
-        '/usr/bin/plink1.9 '
+        '/plink/plink2 '
         '--vcf {input} '
         '--double-id '
         '--allow-extra-chr '
@@ -211,28 +186,25 @@ rule plink_prune_linkage:
         '--out {params.out} '
         '&> {log}'
 
-##PCA on all snps - some likely in LD though
-rule plink_pca_no_ldpruning:
+rule vcf_to_plink:
     input:
-        vcf = 'output/03_final_vcfs/{vcf_group}.vcf.gz',
+        vcf = 'output/03_final_vcfs/all_samples.vcf.gz'
     output:
-        'output/04_plink/{vcf_group}/no_ldpruning/filtered_snps_plink_pca.eigenvec'
+        pgen = 'output/04_plink_pruning/all_samples.pgen'
     params:
-        'output/04_plink/{vcf_group}/no_ldpruning/filtered_snps_plink_pca'
+        prefix = 'output/04_plink_pruning/all_samples'
     log:
-        'output/logs/plink_pca_no_ldpruning_{vcf_group}.log'
+        'output/logs/plink_pruning/vcf_to_plink2.log'
     singularity:
         plink_container
     shell:
-        '/usr/bin/plink1.9 '
+        '/plink/plink2 '
         '--vcf {input.vcf} '
-        '--double-id '
         '--allow-extra-chr '
         '--set-missing-var-ids @:# '
-        '--make-bed '
-        '--pca '
-        '--out {params} '
-        '&> {log}'
+        '--make-pgen '
+        '--out {params.prefix} '
+        '2> {log}'
 
 #####################
 ## 03 - final VCFs ##
