@@ -48,7 +48,7 @@ rule target:
         ##Plink --> PCA
         expand('output/04_plink/{vcf_group}/no_ldpruning/filtered_snps_plink_pca.eigenvec', vcf_group=["all_samples", "ruakura", "dunedin"]),
         expand('output/04_plink/{vcf_group}/ld_pruned/filtered_snps_plink_pca.eigenvec', vcf_group=["all_samples", "ruakura", "dunedin"]),
-        'output/03_final_vcfs/all_samples_pruned_snps.vcf',
+        'output/03_final_vcfs/all_samples_pruned.vcf.gz',
         #stats
         #'output/05_stats/nucl_diversity_1kb.windowed.pi',
         #'output/05_stats/TajD_1kb.Tajima.D',
@@ -135,7 +135,7 @@ rule prune_vcf:
         vcf = 'output/03_final_vcfs/renamed/all_samples.vcf',
         prune = 'output/04_plink/all_samples/ld_pruned/filtered_snps_plink.prune.in'
     output:
-        vcf = 'output/03_final_vcfs/all_samples_pruned_snps.vcf'
+        vcf = 'output/03_final_vcfs/all_samples_pruned.vcf.gz'
     log:
         'output/logs/prune_vcf.log'
     singularity:
@@ -144,7 +144,7 @@ rule prune_vcf:
         'bcftools view '
         '-i \'ID=@{input.prune}\' '
         '{input.vcf} '
-        '> {output.vcf} '
+        '-O z -o {output.vcf} '
         '2> {log}'
 
 rule bcftools_setID:
@@ -249,7 +249,7 @@ rule bcftools_split_vcf_location:
     singularity:
         bcftools_container
     shell:
-        'bcftools view -S {input.location_samples} {input.vcf} > {output.location_vcf} 2> {log}'
+        'bcftools view -S {input.location_samples} {input.vcf} -O z  -o {output.location_vcf} 2> {log}'
 
 ###################################
 ## 02 - GATK merging & filtering ##
